@@ -4,6 +4,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage
 from dotenv import load_dotenv
+from langgraph.checkpoint.memory import InMemorySaver
 
 load_dotenv()
 
@@ -22,6 +23,8 @@ def llm_response(state:GraphState)->GraphState:
 # Initialize the graph
 graph = StateGraph(GraphState)
 
+checkpoint_saver = InMemorySaver()
+
 # Add Nodes
 graph.add_node("llm_response", llm_response)
 
@@ -30,7 +33,7 @@ graph.add_edge(START, "llm_response")
 graph.add_edge("llm_response", END)
 
 # compile the graph
-chatbot = graph.compile()
+chatbot = graph.compile(checkpointer=checkpoint_saver)
 
 
 
