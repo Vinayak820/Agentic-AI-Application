@@ -1,40 +1,41 @@
 from langgraph.graph import StateGraph, START, END
 from typing import TypedDict, Annotated
+from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph.message import add_messages
-from langchain_core.messages import BaseMessage
 from dotenv import load_dotenv
-from langgraph.checkpoint.memory import InMemorySaver
+import sqlite3
 
 load_dotenv()
 
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+llm = ChatOpenAI()
 
-# Define the state of the graph
-class GraphState(TypedDict):
-    message : Annotated[list[BaseMessage], add_messages]
+class ChatState(TypedDict):
+    messages: Annotated[list[BaseMessage], add_messages]
 
-# Define the LLM response node
-def llm_response(state:GraphState)->GraphState:
-    messages = state["message"]
+def chat_node(state: ChatState):
+    messages = state['messages']
     response = llm.invoke(messages)
-    return {"message": [response]}
+    return {"messages": [response]}
 
-# Initialize the graph
-graph = StateGraph(GraphState)
+conn = sqlite3.connect(database='chatbot.db', check_same_thread=False)
+# Checkpointer
+checkpointer = SqliteSaver(conn=conn)
 
-checkpoint_saver = InMemorySaver()
+graph = StateGraph(ChatState)
+graph.add_node("chat_node", chat_node)
+graph.add_edge(START, "chat_node")
+graph.add_edge("chat_node", END)
 
-# Add Nodes
-graph.add_node("llm_response", llm_response)
+chatbot = graph.compile(checkpointer=checkpointer)
 
-# Add Edges
-graph.add_edge(START, "llm_response")
-graph.add_edge("llm_response", END)
+def retrieve_all_threads():
+    all_threads = set()
+    for checkpoint in checkpointer.list(None):
+        all_threads.add(checkpoint.config['configurable']['thread_id'])
 
-# compile the graph
-chatbot = graph.compile(checkpointer=checkpoint_saver)
-
+    return list(all_threads)
 
 
 # Will integrate in the frontend later, for now we can test the graph here in the backend
