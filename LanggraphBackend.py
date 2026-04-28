@@ -8,7 +8,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 load_dotenv()
 
-llm = ChatOpenAI(model="gpt-4-0613", temperature=0.7)
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
 
 # Define the state of the graph
 class GraphState(TypedDict):
