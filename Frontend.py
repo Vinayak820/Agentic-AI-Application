@@ -81,7 +81,8 @@ if user_input:
         st.text(user_input)
 
     #CONFIG = {'configurable': {'thread_id': st.session_state['thread_id']}}
-
+    # For threading and tracing to work, we need to pass the thread_id in the config. 
+    # This is how langchain knows which conversation to append the new messages to and also which conversation to trace.
     CONFIG = {
         "configurable": {"thread_id": st.session_state["thread_id"]},
         "metadata": {
