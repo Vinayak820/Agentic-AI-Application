@@ -1,3 +1,6 @@
 .env
 myAgentic/
 chatbot.db
+expenses.db
+chatbot.db-shm
+chatbot.db-wal

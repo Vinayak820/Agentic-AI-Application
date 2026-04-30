@@ -1,11 +1,16 @@
-import streamlit as st
-from LanggraphBackend import chatbot, retrieve_all_threads
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+# After MCP, with async streaming and better status handling
+
+import queue
 import uuid
+
+import streamlit as st
+from LanggraphBackend import chatbot, retrieve_all_threads, submit_async_task
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 # =========================== Utilities ===========================
 def generate_thread_id():
     return uuid.uuid4()
+
 
 def reset_chat():
     thread_id = generate_thread_id()
@@ -13,14 +18,17 @@ def reset_chat():
     add_thread(thread_id)
     st.session_state["message_history"] = []
 
+
 def add_thread(thread_id):
     if thread_id not in st.session_state["chat_threads"]:
         st.session_state["chat_threads"].append(thread_id)
+
 
 def load_conversation(thread_id):
     state = chatbot.get_state(config={"configurable": {"thread_id": thread_id}})
     # Check if messages key exists in state values, return empty list if not
     return state.values.get("messages", [])
+
 
 # ======================= Session Initialization ===================
 if "message_history" not in st.session_state:
@@ -35,7 +43,7 @@ if "chat_threads" not in st.session_state:
 add_thread(st.session_state["thread_id"])
 
 # ============================ Sidebar ============================
-st.sidebar.title("LangGraph Chatbot")
+st.sidebar.title("LangGraph MCP Chatbot")
 
 if st.sidebar.button("New Chat"):
     reset_chat()
@@ -79,11 +87,31 @@ if user_input:
         status_holder = {"box": None}
 
         def ai_only_stream():
-            for message_chunk, metadata in chatbot.stream(
-                {"messages": [HumanMessage(content=user_input)]},
-                config=CONFIG,
-                stream_mode="messages",
-            ):
+            event_queue: queue.Queue = queue.Queue()
+
+            async def run_stream():
+                try:
+                    async for message_chunk, metadata in chatbot.astream(
+                        {"messages": [HumanMessage(content=user_input)]},
+                        config=CONFIG,
+                        stream_mode="messages",
+                    ):
+                        event_queue.put((message_chunk, metadata))
+                except Exception as exc:
+                    event_queue.put(("error", exc))
+                finally:
+                    event_queue.put(None)
+
+            submit_async_task(run_stream())
+
+            while True:
+                item = event_queue.get()
+                if item is None:
+                    break
+                message_chunk, metadata = item
+                if message_chunk == "error":
+                    raise metadata
+
                 # Lazily create & update the SAME status container when any tool runs
                 if isinstance(message_chunk, ToolMessage):
                     tool_name = getattr(message_chunk, "name", "tool")
